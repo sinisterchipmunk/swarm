@@ -59,7 +59,7 @@ def ssh_recursive
 
       cmd = "rm -rf swarm; mkdir swarm; cd swarm; "
       CONCURRENCY.times do |i|
-        cmd << "mkdir #{i}; cd #{i}; #{COMMAND} &"
+        cmd << "mkdir #{i}; cd #{i}; #{COMMAND} &; cd ..;  "
       end
 
       begin
