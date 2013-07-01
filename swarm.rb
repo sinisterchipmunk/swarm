@@ -39,13 +39,17 @@ aws = AWS::EC2::Base.new(access_key_id: ACCESS_KEY_ID,
 bees = File.read(bees_config).lines.to_a
 USERNAME = bees[0].chomp
 SSH_KEY = bees[1].chomp
-instance_ids = bees[2..-1]
+instance_ids = bees[2..-1].collect { |i| i.chomp }
 
 instances = aws.describe_instances(instance_ids: instance_ids)
+require 'pp'
 IPS = []
 
-instances['reservationSet']['item'][0]['instancesSet']['item'].each do |instance|
-  IPS.push instance['privateDnsName']
+instances['reservationSet']['item'].each do |set|
+  set['instancesSet']['item'].each do |instance|
+    next unless instance_ids.include?(instance['instanceId'])
+    IPS.push instance['privateDnsName']
+  end
 end
 
 THREADS = []
@@ -57,10 +61,11 @@ def ssh_recursive
     Net::SSH.start(ip, USERNAME, keys: [File.expand_path('~/.ssh/%s.pem' % SSH_KEY)]) do |ssh|
       ssh_recursive
 
-      cmd = "rm -rf swarm; mkdir swarm; cd swarm; "
+      cmd = "(rm -rf swarm; mkdir swarm; cd swarm; "
       CONCURRENCY.times do |i|
-        cmd << "mkdir #{i}; cd #{i}; #{COMMAND} &; cd ..;  "
+        cmd << "mkdir #{i}; cd #{i}; #{COMMAND}; cd ..;  "
       end
+      cmd << ") &"
 
       begin
         ssh.exec cmd do |ch, stream, data|
