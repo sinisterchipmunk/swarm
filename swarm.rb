@@ -12,17 +12,19 @@ rescue LoadError
   exit
 end
 
-if ARGV.length != 2
-  puts "Usage: swarm [N] [CMD]"
+unless [2, 3].include? ARGV.length
+  puts "Usage: swarm [N] [CMD] [BEFORE]"
   puts
-  puts "N   - The number of concurrent executions PER BEE"
-  puts "CMD - the command(s) to execute"
+  puts "N      - The number of concurrent executions PER BEE"
+  puts "CMD    - the command to execute"
+  puts "BEFORE - optional command(s) to execute during the setup phase"
   puts
   exit
 end
 
 CONCURRENCY = ARGV[0].to_i
 COMMAND     = ARGV[1]
+BEFORE      = ARGV[2] || ""
 
 swarm_config = File.expand_path("~/.swarm")
 bees_config  = File.expand_path('~/.bees')
@@ -48,11 +50,47 @@ IPS = []
 instances['reservationSet']['item'].each do |set|
   set['instancesSet']['item'].each do |instance|
     next unless instance_ids.include?(instance['instanceId'])
-    IPS.push instance['privateDnsName']
+    IPS.push instance['dnsName'] #instance['privateDnsName']
   end
 end
 
 THREADS = []
+
+cmd = [
+  'rm -rf swarm',
+  'mkdir swarm',
+  'cd swarm'
+]
+
+cmd.concat [
+  "for RUN in #{CONCURRENCY.times.to_a.join(' ')}",
+  "do",
+    "mkdir $RUN",
+    "cd $RUN",
+    BEFORE,
+    "cd ..",
+  "done"
+]
+
+cmd.concat [
+  "for RUN in #{CONCURRENCY.times.to_a.join(' ')}",
+  "do",
+    "cd $RUN",
+    "#{COMMAND} &",
+    "export WAITFOR=\"$WAITFOR $! \"",
+    "cd ..",
+  "done"
+]
+
+cmd.concat [
+  'for i in $WAITFOR',
+  'do',
+    'wait $i',
+  'done'
+]
+
+CMD = "bash <<-end_cmd\n#{cmd.join("\n").gsub(/\$/, '\\$')}\nend_cmd\n"
+
 def ssh_recursive
   return unless ip = IPS.pop
   THREADS << Thread.new do
@@ -61,14 +99,8 @@ def ssh_recursive
     Net::SSH.start(ip, USERNAME, keys: [File.expand_path('~/.ssh/%s.pem' % SSH_KEY)]) do |ssh|
       ssh_recursive
 
-      cmd = "(rm -rf swarm; mkdir swarm; cd swarm; "
-      CONCURRENCY.times do |i|
-        cmd << "mkdir #{i}; cd #{i}; #{COMMAND}; cd ..;  "
-      end
-      cmd << ") &"
-
       begin
-        ssh.exec cmd do |ch, stream, data|
+        ssh.exec CMD do |ch, stream, data|
           if stream == :stderr
             puts "ERROR: #{data}"
           else
@@ -87,3 +119,4 @@ end
 ssh_recursive
 
 THREADS.each { |th| th.join }
+p 'done'
