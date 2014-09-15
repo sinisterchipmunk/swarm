@@ -43,16 +43,22 @@ USERNAME = bees[0].chomp
 SSH_KEY = bees[1].chomp
 instance_ids = bees[2..-1].collect { |i| i.chomp }
 
-instances = aws.describe_instances(instance_ids: instance_ids)
+#instances = aws.describe_instances(instance_ids: instance_ids)
 require 'pp'
 IPS = []
 
-instances['reservationSet']['item'].each do |set|
-  set['instancesSet']['item'].each do |instance|
-    next unless instance_ids.include?(instance['instanceId'])
-    IPS.push instance['dnsName'] #instance['privateDnsName']
-  end
+#instances['reservationSet']['item'].each do |set|
+#  set['instancesSet']['item'].each do |instance|
+#    next unless instance_ids.include?(instance['instanceId'])
+#    IPS.push instance['dnsName'] #instance['privateDnsName']
+#  end
+#end
+
+`bees report | grep "running " | cut -d ' ' -f 5`.lines.each do |line|
+  IPS << line.chomp
 end
+
+puts "IPs : #{IPS.inspect}"
 
 THREADS = []
 
@@ -94,7 +100,7 @@ CMD = "bash <<-end_cmd\n#{cmd.join("\n").gsub(/\$/, '\\$')}\nend_cmd\n"
 def ssh_recursive
   return unless ip = IPS.pop
   THREADS << Thread.new do
-    puts "Connecting to #{ip}"
+    puts "Connecting to #{USERNAME}@#{ip} with ~/.ssh/#{SSH_KEY}.pem"
 
     Net::SSH.start(ip, USERNAME, keys: [File.expand_path('~/.ssh/%s.pem' % SSH_KEY)]) do |ssh|
       ssh_recursive

@@ -3,7 +3,9 @@ GEM
   specs:
     amazon-ec2 (0.9.17)
       xml-simple (>= 1.0.12)
+    log4r (1.1.10)
     net-ssh (2.6.2)
+    statsd-ruby (1.2.1)
     xml-simple (1.1.2)
 
 PLATFORMS
@@ -11,4 +13,6 @@ PLATFORMS
 
 DEPENDENCIES
   amazon-ec2
+  log4r
   net-ssh
+  statsd-ruby
